@@ -92,5 +92,14 @@ youtube-downloader/
 | **8K Formats Missing** | The app already uses `android_vr` to bypass blocks. If they ever break, run `pip install --upgrade yt-dlp` to get the latest patches. |
 | **Port 8000 in use** | Stop whatever is running on port 8000, or modify the port at the bottom of `main.py`. |
 
+## Acknowledgments
+This project is built upon the shoulders of giants. Special thanks to:
+- **[yt-dlp](https://github.com/yt-dlp/yt-dlp)** for the incredibly powerful media extraction engine.
+- **[FFmpeg](https://ffmpeg.org/)** for the flawless audio and video merging capabilities.
+- **[FastAPI](https://fastapi.tiangolo.com/)** for providing a lightning-fast Python web framework.
+
 ## License
-For personal use only. Not for distribution or commercial use.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+## Disclaimer
+Users are responsible for complying with YouTube's Terms of Service and applicable copyright laws. This project is provided for educational and personal-use purposes only.
