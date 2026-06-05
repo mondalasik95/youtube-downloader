@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="Local YouTube video downloader for macOS — download any YouTube video in any format" />
   <title>YouTube Downloader</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.css" />
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⬇️</text></svg>" />
 </head>
@@ -48,24 +49,6 @@
         </button>
       </div>
 
-      <!-- Advanced Options -->
-      <div class="advanced-options">
-        <div class="option-group">
-          <label for="start-time">Clip Start</label>
-          <input type="text" id="start-time" placeholder="00:00:00" class="time-input">
-        </div>
-        <div class="option-group">
-          <label for="end-time">Clip End</label>
-          <input type="text" id="end-time" placeholder="00:01:30" class="time-input">
-        </div>
-        <div class="option-group checkbox-group">
-          <label class="custom-checkbox">
-            <input type="checkbox" id="embed-subtitles">
-            <span class="checkmark"></span>
-            Embed Subtitles
-          </label>
-        </div>
-      </div>
     </section>
 
     <!-- Search Results -->
@@ -82,8 +65,11 @@
     <!-- Video Info -->
     <section id="video-info-section" class="video-info-section glass-card">
       <div class="video-info">
-        <div class="video-thumbnail">
+        <div class="video-thumbnail" style="position: relative;">
           <img id="video-thumbnail" src="" alt="Video thumbnail" />
+          <div id="main-watch-btn" class="thumbnail-play-overlay">
+            <svg viewBox="0 0 24 24" width="40" height="40" fill="white"><path d="M8 5v14l11-7z"/></svg>
+          </div>
         </div>
         <div class="video-meta">
           <h2 id="video-title" class="video-title"></h2>
@@ -101,22 +87,69 @@
               <span id="video-views"></span>
             </div>
           </div>
+          
+          <!-- Clipping Slider -->
+          <div class="video-clipping-section" id="clipping-section" style="display:none; margin-top: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+              <h3 style="margin: 0; font-size: 1rem; color: var(--text-color);">Clip Range</h3>
+              <span id="slider-range-label" style="font-family: monospace; font-size: 0.95rem; color: var(--primary-color);">00:00:00 - 00:00:00</span>
+            </div>
+            <div id="time-slider" style="margin: 0 10px;"></div>
+          </div>
+          
+          <!-- Subtitles Section -->
+          <div class="video-subtitle-section" id="subtitle-section" style="display:none; margin-top: 20px;">
+            <h3 style="margin: 0 0 10px 0; font-size: 1rem; color: var(--text-color);">Subtitles</h3>
+            <div style="display: flex; align-items: center; gap: 15px;">
+              <label class="custom-checkbox">
+                <input type="checkbox" id="embed-subtitles">
+                <span class="checkmark"></span>
+                Embed Subtitles
+              </label>
+              <select id="subtitle-lang" class="custom-select" style="display:none;">
+                <!-- Options injected by JS -->
+              </select>
+            </div>
+          </div>
+
+          <!-- Audio Language Section -->
+          <div class="video-audio-lang-section" id="audio-lang-section" style="display:none; margin-top: 20px;">
+            <h3 style="margin: 0 0 10px 0; font-size: 1rem; color: var(--text-color);">Audio Track</h3>
+            <div style="display: flex; align-items: center; gap: 15px;">
+              <select id="audio-lang" class="custom-select">
+                <!-- Options injected by JS -->
+              </select>
+            </div>
+          </div>
+          
         </div>
       </div>
     </section>
 
     <!-- Playlist Info -->
     <section id="playlist-info-section" class="playlist-info-section glass-card" style="display:none">
-      <div class="playlist-header">
-        <h2 id="playlist-title"></h2>
-        <p class="subtitle" id="playlist-count"></p>
+      <div class="playlist-header" style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 10px;">
+        <div>
+          <h2 id="playlist-title"></h2>
+          <p class="subtitle" id="playlist-count"></p>
+        </div>
+        <div>
+          <label class="custom-checkbox" style="margin: 0; padding-bottom: 5px;">
+            <input type="checkbox" id="check-all-playlist" checked>
+            <span class="checkmark"></span>
+            Select All
+          </label>
+        </div>
       </div>
       <div class="playlist-list-wrapper">
         <ul id="playlist-ul" class="playlist-ul"></ul>
       </div>
-      <div class="playlist-actions">
+      <div class="playlist-actions" style="display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap;">
+        <button id="btn-download-playlist-mp3" class="btn" style="background: var(--badge-audio-only-bg); color: var(--badge-audio-only); border: 1px solid rgba(59, 130, 246, 0.2);">
+           🎵 Download Selected (Best MP3)
+        </button>
         <button id="btn-download-playlist" class="btn btn-success">
-           ⬇ Download Selected Playlist Videos (Best MP4)
+           🎬 Download Selected (Best MP4)
         </button>
       </div>
     </section>
@@ -277,6 +310,20 @@
     <span id="error-toast-message"></span>
   </div>
 
+  <!-- Video Player Modal -->
+  <div id="video-modal" class="modal-overlay">
+    <div class="modal-content video-modal-content">
+      <div class="modal-header">
+        <h3 style="margin:0">Preview</h3>
+        <button class="close-btn" id="close-video-modal">&times;</button>
+      </div>
+      <div class="video-iframe-container">
+        <iframe id="video-iframe" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>
