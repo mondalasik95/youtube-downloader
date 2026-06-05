@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Local YouTube video downloader for macOS — download any YouTube video in any format" />
+  <title>YouTube Downloader</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⬇️</text></svg>" />
+</head>
+<body>
+  <div class="app-wrapper">
+
+    <!-- Header -->
+    <header class="app-header">
+      <div class="logo">
+        <div class="logo-icon">⬇</div>
+        <h1>YT Downloader</h1>
+      </div>
+      <p class="subtitle">Local YouTube video downloader for macOS</p>
+    </header>
+
+    <!-- Dependency warning banner -->
+    <div id="dep-banner" class="dep-banner"></div>
+
+    <!-- URL Input -->
+    <section id="url-section" class="url-section glass-card">
+      <div class="url-input-wrapper">
+        <input
+          type="url"
+          id="url-input"
+          placeholder="Paste a YouTube URL here…"
+          autocomplete="off"
+          spellcheck="false"
+          aria-label="YouTube video URL"
+        />
+        <button id="fetch-btn" class="btn btn-primary" type="button">
+          <span id="fetch-btn-text">Fetch Formats</span>
+          <div id="fetch-spinner" class="spinner" style="display:none"></div>
+        </button>
+      </div>
+    </section>
+
+    <!-- Video Info -->
+    <section id="video-info-section" class="video-info-section glass-card">
+      <div class="video-info">
+        <div class="video-thumbnail">
+          <img id="video-thumbnail" src="" alt="Video thumbnail" />
+        </div>
+        <div class="video-meta">
+          <h2 id="video-title" class="video-title"></h2>
+          <div class="video-details">
+            <div class="video-detail-item">
+              <span class="icon">📺</span>
+              <span id="video-channel"></span>
+            </div>
+            <div class="video-detail-item">
+              <span class="icon">⏱</span>
+              <span id="video-duration"></span>
+            </div>
+            <div class="video-detail-item" id="video-views-item" style="display:none">
+              <span class="icon">👁</span>
+              <span id="video-views"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Formats -->
+    <section id="formats-section" class="formats-section">
+      <div class="glass-card">
+        <div class="formats-header">
+          <h2>Available Formats <span id="format-count" class="format-count">0</span></h2>
+        </div>
+
+        <!-- Filters -->
+        <div class="filters-bar" id="filters-bar">
+          <button class="filter-chip active" data-filter="all">All</button>
+          <button class="filter-chip" data-filter="video_audio">Video + Audio</button>
+          <button class="filter-chip" data-filter="video_only">Video Only</button>
+          <button class="filter-chip" data-filter="audio_only">Audio Only</button>
+          <button class="filter-chip" data-filter="mp4">MP4</button>
+          <button class="filter-chip" data-filter="webm">WebM</button>
+        </div>
+
+        <!-- Sort -->
+        <div class="sort-bar">
+          <label for="sort-select">Sort by:</label>
+          <select id="sort-select">
+            <option value="resolution_desc">Resolution (High → Low)</option>
+            <option value="resolution_asc">Resolution (Low → High)</option>
+            <option value="size_desc">File Size (Large → Small)</option>
+            <option value="size_asc">File Size (Small → Large)</option>
+          </select>
+        </div>
+
+        <!-- Table -->
+        <div class="format-table-wrapper">
+          <table class="format-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Format ID</th>
+                <th>Resolution</th>
+                <th>Container</th>
+                <th>Size</th>
+                <th>Video Codec</th>
+                <th>Audio Codec</th>
+                <th>FPS</th>
+                <th>Type</th>
+              </tr>
+            </thead>
+            <tbody id="formats-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Actions -->
+    <section id="actions-section" class="actions-section glass-card">
+      <div class="actions-grid">
+        <button id="btn-download-selected" class="btn btn-primary" disabled>
+          ⬇ Download Selected
+        </button>
+        <button id="btn-download-best" class="btn btn-success">
+          ⭐ Best Quality
+        </button>
+        <button id="btn-download-mp4" class="btn btn-warning">
+          🎬 Best MP4
+        </button>
+        <button id="btn-download-audio" class="btn btn-info">
+          🎵 Audio Only (MP3)
+        </button>
+      </div>
+    </section>
+
+    <!-- Progress -->
+    <section id="progress-section" class="progress-section">
+      <div class="glass-card progress-card">
+        <div class="progress-header">
+          <span id="progress-status" class="progress-status">Preparing…</span>
+          <span id="progress-percentage" class="progress-percentage">0%</span>
+        </div>
+        <div class="progress-bar-wrapper">
+          <div id="progress-bar" class="progress-bar" style="width:0%"></div>
+        </div>
+        <div class="progress-details">
+          <div class="progress-detail">
+            <span class="progress-detail-label">Speed</span>
+            <span id="progress-speed" class="progress-detail-value">—</span>
+          </div>
+          <div class="progress-detail">
+            <span class="progress-detail-label">ETA</span>
+            <span id="progress-eta" class="progress-detail-value">—</span>
+          </div>
+          <div class="progress-detail">
+            <span class="progress-detail-label">Status</span>
+            <span id="progress-dl-status" class="progress-detail-value">Queued</span>
+          </div>
+        </div>
+        <div id="progress-message" class="progress-message" style="display:none"></div>
+        <div id="progress-complete" class="progress-complete" style="display:none">
+          ✅ <span id="progress-complete-text"></span>
+        </div>
+        <div id="progress-error" class="progress-complete progress-error" style="display:none">
+          ❌ <span id="progress-error-text"></span>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- Merge Confirmation Modal -->
+  <div id="merge-modal" class="modal-overlay">
+    <div class="modal-content">
+      <h3 class="modal-title">Video-Only Format Selected</h3>
+      <div class="modal-warning">
+        <span class="modal-warning-icon">⚠️</span>
+        <span class="modal-warning-text">
+          This format contains <strong>video only</strong> — there is no audio track.
+          Would you like to automatically download and merge the best audio track?
+        </span>
+      </div>
+      <p class="modal-message">
+        <strong>Option A:</strong> Download video-only (no audio).<br/>
+        <strong>Option B:</strong> Download video + best audio and merge automatically using FFmpeg.
+      </p>
+      <div class="modal-actions">
+        <button id="merge-btn-video-only" class="btn btn-secondary">
+          Download Video Only
+        </button>
+        <button id="merge-btn-merge" class="btn btn-primary">
+          ✨ Auto-Merge (Recommended)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error Toast -->
+  <div id="error-toast" class="error-toast">
+    <button id="error-toast-close" class="error-toast-close">✕</button>
+    <span id="error-toast-message"></span>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
