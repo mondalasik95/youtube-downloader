@@ -65,7 +65,8 @@ class DownloadRequest(BaseModel):
     format_id: Optional[str] = None
     start_time: Optional[str] = None
     end_time: Optional[str] = None
-    download_subtitles: bool = False
+    subtitle_lang: Optional[str] = None
+    audio_lang: Optional[str] = None
     title: Optional[str] = None
     thumbnail: Optional[str] = None
 
@@ -104,6 +105,8 @@ class VideoInfoResponse(BaseModel):
     channel: str = "Unknown"
     view_count: Optional[int] = None
     upload_date: Optional[str] = None
+    subtitles: list[str] = []
+    audio_langs: list[str] = []
     formats: list[FormatInfo] = []
     url: Optional[str] = None  # To track the URL in playlists
 

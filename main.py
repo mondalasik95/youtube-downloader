@@ -235,7 +235,8 @@ async def start_download(req: DownloadRequest) -> dict[str, str]:
             kwargs = {
                 "start_time": req.start_time,
                 "end_time": req.end_time,
-                "download_subtitles": req.download_subtitles,
+                "subtitle_lang": req.subtitle_lang,
+                "audio_lang": req.audio_lang,
             }
             if req.action == DownloadAction.BEST:
                 filepath = download_best(req.url, task_id, cb, **kwargs)

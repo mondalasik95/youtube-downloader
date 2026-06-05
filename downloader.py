@@ -126,15 +126,30 @@ def _build_video_info(info: dict[str, Any]) -> VideoInfoResponse:
     else:
         duration_str = f"{minutes}:{seconds:02d}"
 
+    # Extract only manual subtitle language codes (exclude auto-captions)
+    subs = info.get("subtitles") or {}
+    subtitles = sorted(list(subs.keys()))
+
+    # Extract audio languages
+    audio_langs_set = set()
+    for f in info.get("formats", []):
+        if f.get("vcodec") == "none" and f.get("acodec") != "none":
+            lang = f.get("language")
+            if lang:
+                audio_langs_set.add(lang)
+    audio_langs = sorted(list(audio_langs_set))
+
     return VideoInfoResponse(
         id=info.get("id"),
-        title=info.get("title", "Unknown"),
-        thumbnail=info.get("thumbnail", ""),
+        title=info.get("title") or "Unknown",
+        thumbnail=info.get("thumbnail") or "",
         duration=duration,
         duration_string=duration_str,
-        channel=info.get("channel", info.get("uploader", "Unknown")),
+        channel=info.get("channel") or info.get("uploader") or "Unknown",
         view_count=info.get("view_count"),
         upload_date=info.get("upload_date"),
+        subtitles=subtitles,
+        audio_langs=audio_langs,
         formats=formats,
         url=info.get("webpage_url") or info.get("url"),
     )
@@ -251,7 +266,7 @@ def _build_base_ydl_opts(
     callback: ProgressCallback,
     start_time: str | None = None,
     end_time: str | None = None,
-    download_subtitles: bool = False,
+    subtitle_lang: str | None = None,
     embed_thumbnail: bool = True,
 ) -> dict[str, Any]:
     ensure_download_dir()
@@ -273,9 +288,9 @@ def _build_base_ydl_opts(
         opts["writethumbnail"] = True
         opts["postprocessors"].append({"key": "EmbedThumbnail", "already_have_thumbnail": False})
 
-    if download_subtitles:
+    if subtitle_lang:
         opts["writesubtitles"] = True
-        opts["subtitleslangs"] = ["en", ".*"] # try english, fallback to any
+        opts["subtitleslangs"] = [subtitle_lang]
         opts["postprocessors"].append({"key": "FFmpegSubtitlesConvertor", "format": "srt"})
         opts["postprocessors"].append({"key": "FFmpegEmbedSubtitle"})
 
@@ -318,11 +333,13 @@ def download_best(
     callback: ProgressCallback,
     start_time: str | None = None,
     end_time: str | None = None,
-    download_subtitles: bool = False,
+    subtitle_lang: str | None = None,
+    audio_lang: str | None = None,
 ) -> str:
     """Download the best available quality (video+audio merged)."""
-    ydl_opts = _build_base_ydl_opts(task_id, callback, start_time, end_time, download_subtitles)
-    ydl_opts["format"] = "bestvideo+bestaudio/best"
+    ydl_opts = _build_base_ydl_opts(task_id, callback, start_time, end_time, subtitle_lang)
+    audio_sel = f"[language={audio_lang}]" if audio_lang else ""
+    ydl_opts["format"] = f"bestvideo+bestaudio{audio_sel}/best"
     ydl_opts["merge_output_format"] = "mp4"
     ydl_opts["postprocessors"].insert(0, {"key": "FFmpegVideoConvertor", "preferedformat": "mp4"})
 
@@ -343,11 +360,13 @@ def download_best_mp4(
     callback: ProgressCallback,
     start_time: str | None = None,
     end_time: str | None = None,
-    download_subtitles: bool = False,
+    subtitle_lang: str | None = None,
+    audio_lang: str | None = None,
 ) -> str:
     """Download the best MP4 (video+audio)."""
-    ydl_opts = _build_base_ydl_opts(task_id, callback, start_time, end_time, download_subtitles)
-    ydl_opts["format"] = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+    ydl_opts = _build_base_ydl_opts(task_id, callback, start_time, end_time, subtitle_lang)
+    audio_sel = f"[language={audio_lang}]" if audio_lang else ""
+    ydl_opts["format"] = f"bestvideo[ext=mp4]+bestaudio[ext=m4a]{audio_sel}/best[ext=mp4]/best"
     ydl_opts["merge_output_format"] = "mp4"
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -367,10 +386,12 @@ def download_audio_only(
     callback: ProgressCallback,
     start_time: str | None = None,
     end_time: str | None = None,
+    audio_lang: str | None = None,
 ) -> str:
     """Download audio only and convert to MP3."""
-    ydl_opts = _build_base_ydl_opts(task_id, callback, start_time, end_time, download_subtitles=False)
-    ydl_opts["format"] = "bestaudio/best"
+    ydl_opts = _build_base_ydl_opts(task_id, callback, start_time, end_time, subtitle_lang=None)
+    audio_sel = f"[language={audio_lang}]" if audio_lang else ""
+    ydl_opts["format"] = f"bestaudio{audio_sel}/best"
     ydl_opts["postprocessors"].insert(0, {
         "key": "FFmpegExtractAudio",
         "preferredcodec": "mp3",
@@ -395,11 +416,13 @@ def download_and_merge(
     callback: ProgressCallback,
     start_time: str | None = None,
     end_time: str | None = None,
-    download_subtitles: bool = False,
+    subtitle_lang: str | None = None,
+    audio_lang: str | None = None,
 ) -> str:
     """Download a video-only format + best audio and merge with FFmpeg."""
-    ydl_opts = _build_base_ydl_opts(task_id, callback, start_time, end_time, download_subtitles)
-    ydl_opts["format"] = f"{video_format_id}+bestaudio/best"
+    ydl_opts = _build_base_ydl_opts(task_id, callback, start_time, end_time, subtitle_lang)
+    audio_sel = f"[language={audio_lang}]" if audio_lang else ""
+    ydl_opts["format"] = f"{video_format_id}+bestaudio{audio_sel}/best"
     ydl_opts["merge_output_format"] = "mp4"
 
     callback(DownloadProgress(
