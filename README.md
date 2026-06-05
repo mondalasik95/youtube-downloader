@@ -5,12 +5,17 @@ A local web-based YouTube video downloader. Runs entirely on your machine — no
 ## Features
 
 - 🎬 **Download up to 8K**: Uses advanced client spoofing (`android_vr`) to bypass YouTube's SABR streaming block, unlocking 4K and 8K AV1 streams out of the box!
-- 🔍 **Browse all available formats**: Clear type badges (Video+Audio / Video Only / Audio Only) to help you choose the exact format you want.
+- 🔍 **Native YouTube Search**: Just type a query directly into the URL bar to search and browse YouTube without leaving the app!
+- ✂️ **Video Clipping**: Download exact segments of a video by specifying a start and end time (e.g. `00:01:00`).
+- 📝 **Subtitle Embedding**: Automatically fetch and burn English or auto-generated subtitles directly into your video files.
+- 🖼️ **Thumbnail & Metadata Magic**: Every downloaded MP4 and MP3 automatically receives the official YouTube thumbnail embedded as its Cover Art!
+- 🗂️ **Download History Gallery**: Your downloads are saved chronologically by date in a sleek gallery, allowing for single-click redownloads.
+- 📂 **Full Playlist Support**: Paste a playlist URL to view all videos and bulk-queue them for background downloading!
+- ⏹ **Instant Cancel**: Safely abort any running download and FFmpeg conversion instantly.
 - 🔀 **Automatic Audio Merging**: YouTube separates audio and video for high resolutions. This app automatically downloads the best audio and perfectly merges it with your selected high-res video using FFmpeg.
 - 🎵 **Extract audio as MP3**: Single-click audio extraction.
 - 📊 **Real-time Download Progress**: See live speed, ETA, and download percentages via Server-Sent Events (SSE).
 - 🌙 **Premium dark-mode UI**: Sleek, glassmorphism design.
-- 🔧 **Sort & Filter**: Easily filter formats by type, container, resolution, and file size.
 
 ## Prerequisites
 
@@ -53,13 +58,14 @@ python3 main.py
 Open your browser to: **http://localhost:8000**
 
 ### Workflow
-1. Paste a YouTube URL into the input field and click **Fetch Formats**.
-2. Browse the table of formats. Use the filter chips (All / Video+Audio / Video Only / Audio Only / MP4 / WebM) to find what you need.
-3. Choose a download action:
-   - **Download Selected:** Downloads the exact format you picked. If it's a "Video Only" format (like 8K), you'll be prompted to automatically download and merge the audio track with it!
+1. **Fetch or Search**: Paste a YouTube URL (Video or Playlist) into the input field, OR simply type a search query (e.g. "Cyberpunk Trailer") and click **Search / Fetch**.
+2. **Advanced Options**: Enter a clip start/end time or check the "Embed Subtitles" box before starting a download.
+3. **Choose an Action**:
+   - **Download Selected:** Downloads the exact format you picked from the table.
    - **Best Quality:** Automatically picks the absolute best video and best audio and merges them.
    - **Best MP4:** The highest quality available specifically in the MP4 container.
    - **Audio Only (MP3):** Extracts the best audio as a high-quality MP3 file.
+   - **Download Selected Playlist Videos**: If viewing a playlist, sequentially queue and download all checked videos in the background.
 
 ### Download Location
 All files are saved to a folder created automatically on your machine:

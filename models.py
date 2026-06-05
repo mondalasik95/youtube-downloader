@@ -48,9 +48,11 @@ class VideoInfoRequest(BaseModel):
         patterns = [
             r"(https?://)?(www\.)?youtube\.com/watch\?v=[\w-]+",
             r"(https?://)?(www\.)?youtube\.com/shorts/[\w-]+",
+            r"(https?://)?(www\.)?youtube\.com/playlist\?list=[\w-]+",
             r"(https?://)?youtu\.be/[\w-]+",
             r"(https?://)?(www\.)?youtube\.com/embed/[\w-]+",
             r"(https?://)?m\.youtube\.com/watch\?v=[\w-]+",
+            r"^ytsearch\d*:.*"  # Allow native ytsearch queries
         ]
         if not any(re.match(p, v.strip()) for p in patterns):
             raise ValueError("Invalid YouTube URL")
@@ -61,6 +63,11 @@ class DownloadRequest(BaseModel):
     url: str
     action: DownloadAction = DownloadAction.SELECTED
     format_id: Optional[str] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    download_subtitles: bool = False
+    title: Optional[str] = None
+    thumbnail: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -89,6 +96,7 @@ class FormatInfo(BaseModel):
 
 
 class VideoInfoResponse(BaseModel):
+    id: Optional[str] = None
     title: str
     thumbnail: str
     duration: int = 0
@@ -97,6 +105,13 @@ class VideoInfoResponse(BaseModel):
     view_count: Optional[int] = None
     upload_date: Optional[str] = None
     formats: list[FormatInfo] = []
+    url: Optional[str] = None  # To track the URL in playlists
+
+class PlaylistResponse(BaseModel):
+    title: str
+    entries: list[VideoInfoResponse] = []
+    extractor: Optional[str] = None
+    id: Optional[str] = None
 
 
 class DownloadProgress(BaseModel):
@@ -112,3 +127,10 @@ class DownloadProgress(BaseModel):
 class ErrorResponse(BaseModel):
     error: str
     error_type: str = "unknown"
+
+class HistoryItem(BaseModel):
+    title: str
+    url: str
+    thumbnail: str
+    filepath: str
+    download_date: str
