@@ -25,7 +25,7 @@ A local web-based YouTube video downloader. Runs entirely on your machine — no
 ## Installation
 
 1. Clone or download this project to your machine.
-2. Open a terminal (or command prompt) inside the `yt-downloader` folder.
+2. Open a terminal (or command prompt) inside the `youtube-downloader` folder.
 3. Run the setup script for your operating system:
 
 **macOS / Linux:**
@@ -70,7 +70,7 @@ All files are saved to a folder created automatically on your machine:
 ## Project Structure
 
 ```
-yt-downloader/
+youtube-downloader/
 ├── main.py           # FastAPI server + backend logic
 ├── downloader.py     # yt-dlp wrapper (metadata, download, merge logic)
 ├── models.py         # Pydantic data models

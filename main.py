@@ -43,7 +43,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
 )
-logger = logging.getLogger("yt-downloader")
+logger = logging.getLogger("youtube-downloader")
 
 # ---------------------------------------------------------------------------
 # In-memory task store
