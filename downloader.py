@@ -18,6 +18,7 @@ from models import (
     FormatInfo,
     FormatType,
     VideoInfoResponse,
+    PlaylistResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 DOWNLOAD_DIR = Path.home() / "Downloads" / "YTDownloader"
+ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
 
 def ensure_download_dir() -> Path:
@@ -112,24 +114,7 @@ def _build_format_info(fmt: dict[str, Any]) -> FormatInfo:
 # Metadata extraction
 # ---------------------------------------------------------------------------
 
-def fetch_video_info(url: str) -> VideoInfoResponse:
-    """Extract video metadata and available formats using yt-dlp."""
-    ydl_opts: dict[str, Any] = {
-        "quiet": True,
-        "no_warnings": True,
-        "skip_download": True,
-        "extractor_args": {"youtube": {"player_client": ["android_vr", "web"]}},
-    }
-
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info: dict[str, Any] = ydl.extract_info(url, download=False)  # type: ignore[arg-type]
-    except yt_dlp.utils.DownloadError as exc:
-        _raise_friendly_error(exc)
-
-    if info is None:
-        raise ValueError("Could not extract video information")
-
+def _build_video_info(info: dict[str, Any]) -> VideoInfoResponse:
     raw_formats = info.get("formats") or []
     formats = [_build_format_info(f) for f in raw_formats if f.get("format_id")]
 
@@ -142,6 +127,7 @@ def fetch_video_info(url: str) -> VideoInfoResponse:
         duration_str = f"{minutes}:{seconds:02d}"
 
     return VideoInfoResponse(
+        id=info.get("id"),
         title=info.get("title", "Unknown"),
         thumbnail=info.get("thumbnail", ""),
         duration=duration,
@@ -150,7 +136,42 @@ def fetch_video_info(url: str) -> VideoInfoResponse:
         view_count=info.get("view_count"),
         upload_date=info.get("upload_date"),
         formats=formats,
+        url=info.get("webpage_url") or info.get("url"),
     )
+
+
+def fetch_video_info(url: str) -> VideoInfoResponse | PlaylistResponse:
+    """Extract video metadata and available formats using yt-dlp. Supports playlists."""
+    ydl_opts: dict[str, Any] = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "extract_flat": "in_playlist", # Extracts playlist info but full info for single videos
+        "extractor_args": {"youtube": {"player_client": ["android_vr", "web"]}},
+    }
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info: dict[str, Any] = ydl.extract_info(url, download=False)  # type: ignore[arg-type]
+    except yt_dlp.utils.DownloadError as exc:
+        _raise_friendly_error(exc)
+
+    if info is None:
+        raise ValueError("Could not extract video information")
+
+    if info.get("_type") == "playlist":
+        entries = []
+        for entry in info.get("entries", []):
+            if entry:
+                entries.append(_build_video_info(entry))
+        return PlaylistResponse(
+            title=info.get("title", "Unknown Playlist"),
+            entries=entries,
+            extractor=info.get("extractor"),
+            id=info.get("id")
+        )
+    
+    return _build_video_info(info)
 
 
 # ---------------------------------------------------------------------------
@@ -187,9 +208,15 @@ def _make_progress_hook(
 
             speed = d.get("_speed_str", "")
             eta = d.get("_eta_str", "")
-            progress.speed = speed.strip() if speed else ""
-            progress.eta = eta.strip() if eta else ""
-            progress.filename = d.get("filename", "")
+            
+            # Strip ANSI color codes
+            speed = ANSI_ESCAPE.sub('', speed).strip() if speed else ""
+            eta = ANSI_ESCAPE.sub('', eta).strip() if eta else ""
+            filename = d.get("filename", "")
+            
+            progress.speed = speed
+            progress.eta = eta
+            progress.filename = filename
             progress.message = f"Downloading{f' {label}' if label else ''}… {progress.percentage}%"
 
         elif status == "finished":
@@ -206,25 +233,75 @@ def _make_progress_hook(
 
     return hook
 
+def _parse_time(time_str: str | None) -> int | None:
+    if not time_str:
+        return None
+    try:
+        parts = time_str.split(':')
+        if len(parts) == 3:
+            return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+        elif len(parts) == 2:
+            return int(parts[0]) * 60 + int(parts[1])
+        return int(parts[0])
+    except ValueError:
+        return None
+
+def _build_base_ydl_opts(
+    task_id: str,
+    callback: ProgressCallback,
+    start_time: str | None = None,
+    end_time: str | None = None,
+    download_subtitles: bool = False,
+    embed_thumbnail: bool = True,
+) -> dict[str, Any]:
+    ensure_download_dir()
+    outtmpl = str(DOWNLOAD_DIR / "%(title)s [%(id)s].%(ext)s")
+    
+    opts: dict[str, Any] = {
+        "outtmpl": outtmpl,
+        "progress_hooks": [_make_progress_hook(task_id, callback)],
+        "quiet": True,
+        "no_warnings": True,
+        "color": "no_color",
+        "extractor_args": {"youtube": {"player_client": ["android_vr", "web"]}},
+        "postprocessors": [
+            {"key": "FFmpegMetadata", "add_metadata": True},
+        ],
+    }
+
+    if embed_thumbnail:
+        opts["writethumbnail"] = True
+        opts["postprocessors"].append({"key": "EmbedThumbnail", "already_have_thumbnail": False})
+
+    if download_subtitles:
+        opts["writesubtitles"] = True
+        opts["subtitleslangs"] = ["en", ".*"] # try english, fallback to any
+        opts["postprocessors"].append({"key": "FFmpegSubtitlesConvertor", "format": "srt"})
+        opts["postprocessors"].append({"key": "FFmpegEmbedSubtitle"})
+
+    s_sec = _parse_time(start_time)
+    e_sec = _parse_time(end_time)
+    if s_sec is not None or e_sec is not None:
+        opts["download_ranges"] = yt_dlp.utils.download_range_func(None, [(s_sec or 0, e_sec or 999999)])
+        # When downloading ranges, yt-dlp uses ffmpeg directly, which is fine.
+        opts["force_keyframes_at_cuts"] = True
+
+    return opts
+
 
 def download_format(
     url: str,
     format_id: str,
     task_id: str,
     callback: ProgressCallback,
+    start_time: str | None = None,
+    end_time: str | None = None,
+    download_subtitles: bool = False,
 ) -> str:
     """Download a single specific format. Returns the output file path."""
-    ensure_download_dir()
-    outtmpl = str(DOWNLOAD_DIR / "%(title)s [%(id)s].%(ext)s")
-
-    ydl_opts: dict[str, Any] = {
-        "format": format_id,
-        "outtmpl": outtmpl,
-        "progress_hooks": [_make_progress_hook(task_id, callback)],
-        "quiet": True,
-        "no_warnings": True,
-        "extractor_args": {"youtube": {"player_client": ["android_vr", "web"]}},
-    }
+    # Do not embed thumbnail for raw formats because WebM does not support it and will crash
+    ydl_opts = _build_base_ydl_opts(task_id, callback, start_time, end_time, download_subtitles, embed_thumbnail=False)
+    ydl_opts["format"] = format_id
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
@@ -232,31 +309,22 @@ def download_format(
     if info is None:
         raise RuntimeError("Download returned no info")
 
-    filepath = ydl.prepare_filename(info)
-    return filepath
+    return ydl.prepare_filename(info)
 
 
 def download_best(
     url: str,
     task_id: str,
     callback: ProgressCallback,
+    start_time: str | None = None,
+    end_time: str | None = None,
+    download_subtitles: bool = False,
 ) -> str:
     """Download the best available quality (video+audio merged)."""
-    ensure_download_dir()
-    outtmpl = str(DOWNLOAD_DIR / "%(title)s [%(id)s].%(ext)s")
-
-    ydl_opts: dict[str, Any] = {
-        "format": "bestvideo+bestaudio/best",
-        "merge_output_format": "mp4",
-        "outtmpl": outtmpl,
-        "progress_hooks": [_make_progress_hook(task_id, callback)],
-        "quiet": True,
-        "no_warnings": True,
-        "extractor_args": {"youtube": {"player_client": ["android_vr", "web"]}},
-        "postprocessors": [
-            {"key": "FFmpegVideoConvertor", "preferedformat": "mp4"},
-        ],
-    }
+    ydl_opts = _build_base_ydl_opts(task_id, callback, start_time, end_time, download_subtitles)
+    ydl_opts["format"] = "bestvideo+bestaudio/best"
+    ydl_opts["merge_output_format"] = "mp4"
+    ydl_opts["postprocessors"].insert(0, {"key": "FFmpegVideoConvertor", "preferedformat": "mp4"})
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
@@ -265,7 +333,6 @@ def download_best(
         raise RuntimeError("Download returned no info")
 
     filepath = ydl.prepare_filename(info)
-    # After merge the extension might change
     mp4_path = Path(filepath).with_suffix(".mp4")
     return str(mp4_path) if mp4_path.exists() else filepath
 
@@ -274,20 +341,14 @@ def download_best_mp4(
     url: str,
     task_id: str,
     callback: ProgressCallback,
+    start_time: str | None = None,
+    end_time: str | None = None,
+    download_subtitles: bool = False,
 ) -> str:
     """Download the best MP4 (video+audio)."""
-    ensure_download_dir()
-    outtmpl = str(DOWNLOAD_DIR / "%(title)s [%(id)s].%(ext)s")
-
-    ydl_opts: dict[str, Any] = {
-        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-        "merge_output_format": "mp4",
-        "outtmpl": outtmpl,
-        "progress_hooks": [_make_progress_hook(task_id, callback)],
-        "quiet": True,
-        "no_warnings": True,
-        "extractor_args": {"youtube": {"player_client": ["android_vr", "web"]}},
-    }
+    ydl_opts = _build_base_ydl_opts(task_id, callback, start_time, end_time, download_subtitles)
+    ydl_opts["format"] = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+    ydl_opts["merge_output_format"] = "mp4"
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
@@ -304,26 +365,17 @@ def download_audio_only(
     url: str,
     task_id: str,
     callback: ProgressCallback,
+    start_time: str | None = None,
+    end_time: str | None = None,
 ) -> str:
     """Download audio only and convert to MP3."""
-    ensure_download_dir()
-    outtmpl = str(DOWNLOAD_DIR / "%(title)s [%(id)s].%(ext)s")
-
-    ydl_opts: dict[str, Any] = {
-        "format": "bestaudio/best",
-        "outtmpl": outtmpl,
-        "progress_hooks": [_make_progress_hook(task_id, callback)],
-        "quiet": True,
-        "no_warnings": True,
-        "extractor_args": {"youtube": {"player_client": ["android_vr", "web"]}},
-        "postprocessors": [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "320",
-            }
-        ],
-    }
+    ydl_opts = _build_base_ydl_opts(task_id, callback, start_time, end_time, download_subtitles=False)
+    ydl_opts["format"] = "bestaudio/best"
+    ydl_opts["postprocessors"].insert(0, {
+        "key": "FFmpegExtractAudio",
+        "preferredcodec": "mp3",
+        "preferredquality": "320",
+    })
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
@@ -341,25 +393,15 @@ def download_and_merge(
     video_format_id: str,
     task_id: str,
     callback: ProgressCallback,
+    start_time: str | None = None,
+    end_time: str | None = None,
+    download_subtitles: bool = False,
 ) -> str:
     """Download a video-only format + best audio and merge with FFmpeg."""
-    ensure_download_dir()
-    outtmpl = str(DOWNLOAD_DIR / "%(title)s [%(id)s].%(ext)s")
+    ydl_opts = _build_base_ydl_opts(task_id, callback, start_time, end_time, download_subtitles)
+    ydl_opts["format"] = f"{video_format_id}+bestaudio/best"
+    ydl_opts["merge_output_format"] = "mp4"
 
-    # Use yt-dlp's built-in merge: request video_format + bestaudio
-    format_spec = f"{video_format_id}+bestaudio/best"
-
-    ydl_opts: dict[str, Any] = {
-        "format": format_spec,
-        "merge_output_format": "mp4",
-        "outtmpl": outtmpl,
-        "progress_hooks": [_make_progress_hook(task_id, callback)],
-        "quiet": True,
-        "no_warnings": True,
-        "extractor_args": {"youtube": {"player_client": ["android_vr", "web"]}},
-    }
-
-    # Notify that merging will happen
     callback(DownloadProgress(
         task_id=task_id,
         status=DownloadStatus.DOWNLOADING,

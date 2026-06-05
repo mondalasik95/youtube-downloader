@@ -1022,3 +1022,175 @@ body::before {
     padding: 1.25rem;
   }
 }
+
+/* Tabs */
+.tabs-container {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  justify-content: center;
+}
+.tab-btn {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  padding: 10px 20px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+.tab-btn:hover {
+  background: var(--hover-bg);
+  color: var(--text-color);
+}
+.tab-btn.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+/* Advanced Options */
+.advanced-options {
+  display: flex;
+  gap: 20px;
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid var(--border-color);
+  flex-wrap: wrap;
+}
+.option-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.option-group label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.time-input {
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  width: 120px;
+  font-family: monospace;
+}
+.checkbox-group {
+  justify-content: flex-end;
+}
+.custom-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.9rem;
+  color: var(--text-color) !important;
+  margin-top: 8px;
+}
+
+/* Playlist Info */
+.playlist-info-section {
+  margin-bottom: 24px;
+}
+.playlist-ul {
+  list-style: none;
+  padding: 0;
+  margin: 15px 0;
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+}
+.playlist-li {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 10px 15px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--card-bg);
+}
+.playlist-li:last-child {
+  border-bottom: none;
+}
+.playlist-li:hover {
+  background: var(--hover-bg);
+}
+.playlist-li img {
+  width: 80px;
+  height: 45px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+.playlist-li-title {
+  flex: 1;
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+.playlist-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* History Gallery */
+.history-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+.history-card {
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.history-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+.history-card img {
+  width: 100%;
+  aspect-ratio: 16/9;
+  object-fit: cover;
+  border-bottom: 1px solid var(--border-color);
+}
+.history-card-body {
+  padding: 15px;
+}
+.history-card-title {
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.history-card-meta {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+
+/* Grouped History Fixes */
+.history-gallery {
+  display: block; /* Remove grid from wrapper */
+}
+.history-date-header {
+  margin-top: 30px;
+  margin-bottom: 15px;
+  color: var(--text-color);
+  font-size: 1.2rem;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 5px;
+}
+.history-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 20px;
+}

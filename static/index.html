@@ -17,8 +17,16 @@
         <div class="logo-icon">⬇</div>
         <h1>YT Downloader</h1>
       </div>
-      <p class="subtitle">Local YouTube video downloader for macOS</p>
+      <p class="subtitle">Local YouTube video downloader for macOS/Linux/Windows</p>
     </header>
+
+    <!-- Tabs -->
+    <div class="tabs-container">
+      <button id="tab-downloader" class="tab-btn active">Downloader</button>
+      <button id="tab-history" class="tab-btn">History</button>
+    </div>
+
+    <div id="view-downloader">
 
     <!-- Dependency warning banner -->
     <div id="dep-banner" class="dep-banner"></div>
@@ -27,17 +35,47 @@
     <section id="url-section" class="url-section glass-card">
       <div class="url-input-wrapper">
         <input
-          type="url"
+          type="text"
           id="url-input"
-          placeholder="Paste a YouTube URL here…"
+          placeholder="Paste a YouTube URL or type a search query…"
           autocomplete="off"
           spellcheck="false"
-          aria-label="YouTube video URL"
+          aria-label="YouTube URL or Search Query"
         />
         <button id="fetch-btn" class="btn btn-primary" type="button">
-          <span id="fetch-btn-text">Fetch Formats</span>
+          <span id="fetch-btn-text">Search / Fetch</span>
           <div id="fetch-spinner" class="spinner" style="display:none"></div>
         </button>
+      </div>
+
+      <!-- Advanced Options -->
+      <div class="advanced-options">
+        <div class="option-group">
+          <label for="start-time">Clip Start</label>
+          <input type="text" id="start-time" placeholder="00:00:00" class="time-input">
+        </div>
+        <div class="option-group">
+          <label for="end-time">Clip End</label>
+          <input type="text" id="end-time" placeholder="00:01:30" class="time-input">
+        </div>
+        <div class="option-group checkbox-group">
+          <label class="custom-checkbox">
+            <input type="checkbox" id="embed-subtitles">
+            <span class="checkmark"></span>
+            Embed Subtitles
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <!-- Search Results -->
+    <section id="search-results-section" class="search-results-section glass-card" style="display:none">
+      <div class="playlist-header">
+        <h2>Search Results</h2>
+        <p class="subtitle" id="search-results-count"></p>
+      </div>
+      <div class="history-gallery-grid" id="search-results-grid">
+        <!-- Search cards injected here -->
       </div>
     </section>
 
@@ -64,6 +102,22 @@
             </div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- Playlist Info -->
+    <section id="playlist-info-section" class="playlist-info-section glass-card" style="display:none">
+      <div class="playlist-header">
+        <h2 id="playlist-title"></h2>
+        <p class="subtitle" id="playlist-count"></p>
+      </div>
+      <div class="playlist-list-wrapper">
+        <ul id="playlist-ul" class="playlist-ul"></ul>
+      </div>
+      <div class="playlist-actions">
+        <button id="btn-download-playlist" class="btn btn-success">
+           ⬇ Download Selected Playlist Videos (Best MP4)
+        </button>
       </div>
     </section>
 
@@ -160,6 +214,14 @@
           </div>
         </div>
         <div id="progress-message" class="progress-message" style="display:none"></div>
+        
+        <!-- Cancel Action -->
+        <div class="progress-actions" style="margin-top: 15px; text-align: right;">
+          <button id="btn-cancel-download" class="btn btn-secondary btn-sm" style="background:var(--error-color); border:none; color:white;">
+            ⏹ Cancel Download
+          </button>
+        </div>
+
         <div id="progress-complete" class="progress-complete" style="display:none">
           ✅ <span id="progress-complete-text"></span>
         </div>
@@ -168,6 +230,18 @@
         </div>
       </div>
     </section>
+
+    </div> <!-- End view-downloader -->
+
+    <!-- History View -->
+    <div id="view-history" style="display:none">
+      <section class="glass-card history-section">
+        <h2>Download History</h2>
+        <div id="history-gallery" class="history-gallery">
+          <!-- History items injected here -->
+        </div>
+      </section>
+    </div>
 
   </div>
 
