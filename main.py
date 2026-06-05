@@ -14,7 +14,7 @@ from typing import Any, AsyncGenerator
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 from sse_starlette.sse import EventSourceResponse  # type: ignore[import-untyped]
@@ -47,6 +47,7 @@ HISTORY_DIR = "history"
 if not os.path.exists(HISTORY_DIR):
     os.makedirs(HISTORY_DIR)
 
+
 def _load_history_file(filepath: str) -> list[dict]:
     if not os.path.exists(filepath):
         return []
@@ -56,20 +57,22 @@ def _load_history_file(filepath: str) -> list[dict]:
     except Exception:
         return []
 
+
 def _save_history(item: HistoryItem) -> None:
     date_str = datetime.now().strftime("%Y-%m-%d")
     filepath = os.path.join(HISTORY_DIR, f"{date_str}.json")
-    
+
     history = _load_history_file(filepath)
-    
+
     # Deduplicate: remove existing entry with same URL
     history = [h for h in history if h.get("url") != item.url]
-    
+
     # Add new entry at top
     history.insert(0, item.model_dump())
-    
+
     with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(history, f, indent=2)
+        # compact dump for performance; change to indent=2 for readability if needed
+        json.dump(history, f, separators=(',', ':'))
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -82,31 +85,37 @@ logging.basicConfig(
 logger = logging.getLogger("youtube-downloader")
 
 # ---------------------------------------------------------------------------
-# In-memory task store
+# In-memory task store (use asyncio.Queue for cross-thread signaling)
 # ---------------------------------------------------------------------------
 
-_tasks: dict[str, list[DownloadProgress]] = {}
-_task_events: dict[str, asyncio.Event] = {}
+_task_queues: dict[str, asyncio.Queue[DownloadProgress]] = {}
 _cancel_flags: dict[str, bool] = {}
-_executor = ThreadPoolExecutor(max_workers=2)
+_executor = ThreadPoolExecutor(max_workers=4)
 
-def _progress_callback(task_id: str) -> Any:
-    """Return a callback that appends progress updates for *task_id*."""
+
+def _progress_callback(task_id: str, loop: asyncio.AbstractEventLoop) -> Any:
+    """Return a callback that schedules progress updates onto the event loop queue for *task_id*."""
 
     def _cb(progress: DownloadProgress) -> None:
         if _cancel_flags.get(task_id):
             raise ValueError("CANCELLED_BY_USER")
 
-        if task_id not in _tasks:
-            _tasks[task_id] = []
-        _tasks[task_id].append(progress)
-        # Signal the SSE consumer that new data is available
-        event = _task_events.get(task_id)
-        if event is not None:
-            event.set()
+        queue = _task_queues.get(task_id)
+        if queue is None:
+            # No consumer available; drop update
+            return
+
+        # Schedule putting into the asyncio.Queue from the worker thread
+        loop.call_soon_threadsafe(queue.put_nowait, progress)
 
     return _cb
 
+
+async def _delayed_cleanup(task_id: str, delay: float = 60.0) -> None:
+    """Remove task state after a delay to allow clients to fetch final state."""
+    await asyncio.sleep(delay)
+    _task_queues.pop(task_id, None)
+    _cancel_flags.pop(task_id, None)
 
 # ---------------------------------------------------------------------------
 # Lifespan
@@ -139,38 +148,45 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # ---------------------------------------------------------------------------
 
 @app.get("/", response_class=HTMLResponse)
-async def index() -> HTMLResponse:
-    """Serve the single-page frontend."""
-    with open("static/index.html", "r", encoding="utf-8") as f:
-        return HTMLResponse(content=f.read())
+async def index() -> FileResponse:
+    """Serve the single-page frontend using FileResponse (non-blocking file handling).
+
+    StaticFiles is already mounted at /static so we serve the single page directly
+    to avoid blocking the event loop with open(...).read().
+    """
+    return FileResponse("static/index.html", media_type="text/html")
 
 
 @app.get("/api/check-deps")
 async def check_deps() -> dict[str, Any]:
-    """Check whether FFmpeg and yt-dlp are available."""
+    """Check whether FFmpeg and yt-dlp are available without blocking the event loop."""
+    ffmpeg_task = asyncio.to_thread(check_ffmpeg)
+    ytdlp_task = asyncio.to_thread(check_ytdlp)
+    ffmpeg, ytdlp = await asyncio.gather(ffmpeg_task, ytdlp_task)
     return {
-        "ffmpeg": check_ffmpeg(),
-        "ytdlp": check_ytdlp(),
+        "ffmpeg": ffmpeg,
+        "ytdlp": ytdlp,
     }
+
 
 @app.get("/api/history")
 async def get_history() -> list[dict[str, Any]]:
     """Return download history grouped by date."""
     if not os.path.exists(HISTORY_DIR):
         return []
-    
-    files = [f for f in os.listdir(HISTORY_DIR) if f.endswith(".json")]
+
+    files = await asyncio.to_thread(lambda: [f for f in os.listdir(HISTORY_DIR) if f.endswith('.json')])
     files.sort(reverse=True)  # Newest dates first
-    
-    grouped = []
+
+    grouped: list[dict[str, Any]] = []
     for f in files:
         date_str = f.replace(".json", "")
         filepath = os.path.join(HISTORY_DIR, f)
-        items = _load_history_file(filepath)
+        items = await asyncio.to_thread(_load_history_file, filepath)
         if items:
             grouped.append({
                 "date": date_str,
-                "items": items
+                "items": items,
             })
     return grouped
 
@@ -196,23 +212,25 @@ async def video_info(req: VideoInfoRequest) -> Any:
 @app.post("/api/download/cancel/{task_id}")
 async def cancel_download(task_id: str) -> dict[str, str]:
     """Flag a download task to be cancelled."""
-    if task_id in _task_events:
+    if task_id in _task_queues:
         _cancel_flags[task_id] = True
         return {"status": "cancelling"}
     raise HTTPException(status_code=404, detail={"error": "Task not found"})
+
 
 @app.post("/api/download")
 async def start_download(req: DownloadRequest) -> dict[str, str]:
     """Start a download task and return its task_id."""
     task_id = uuid.uuid4().hex[:12]
-    _tasks[task_id] = []
-    _task_events[task_id] = asyncio.Event()
+
+    # Create per-task queue for progress; this is safe to do on the event loop
+    _task_queues[task_id] = asyncio.Queue()
     _cancel_flags[task_id] = False
 
     loop = asyncio.get_running_loop()
 
     def _run() -> None:
-        cb = _progress_callback(task_id)
+        cb = _progress_callback(task_id, loop)
         try:
             kwargs = {
                 "start_time": req.start_time,
@@ -245,17 +263,21 @@ async def start_download(req: DownloadRequest) -> dict[str, str]:
                     return
                 filepath = download_format(req.url, req.format_id, task_id, cb, **kwargs)
 
-            # Save to history
+            # Save to history off the event loop
             title = req.title or "Unknown Title"
             thumbnail = req.thumbnail or ""
-            _save_history(HistoryItem(
+            history_item = HistoryItem(
                 title=title,
                 url=req.url,
                 thumbnail=thumbnail,
                 filepath=filepath,
-                download_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            ))
+                download_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            )
 
+            # Schedule saving history on the main loop (which will delegate to a thread)
+            loop.call_soon_threadsafe(asyncio.create_task, asyncio.to_thread(_save_history, history_item))
+
+            # Emit final COMPLETE progress
             cb(DownloadProgress(
                 task_id=task_id,
                 status=DownloadStatus.COMPLETE,
@@ -263,11 +285,14 @@ async def start_download(req: DownloadRequest) -> dict[str, str]:
                 message="Download complete!",
                 filename=filepath,
             ))
+
+            # Schedule delayed cleanup in case no client connects to SSE
+            loop.call_soon_threadsafe(asyncio.create_task, _delayed_cleanup(task_id))
+
         except ValueError as exc:
             if str(exc) == "CANCELLED_BY_USER":
                 logger.info("Download cancelled for task %s", task_id)
-                # Ensure the final progress event doesn't get blocked by the cancel flag again
-                _cancel_flags[task_id] = False 
+                _cancel_flags[task_id] = False
                 cb(DownloadProgress(
                     task_id=task_id,
                     status=DownloadStatus.ERROR,
@@ -296,36 +321,29 @@ async def start_download(req: DownloadRequest) -> dict[str, str]:
 
 @app.get("/api/download/progress/{task_id}")
 async def download_progress(task_id: str, request: Request) -> EventSourceResponse:
-    """SSE endpoint streaming download progress for a given task."""
+    """SSE endpoint streaming download progress for a given task using an asyncio.Queue."""
+
+    queue = _task_queues.get(task_id)
+    if queue is None:
+        raise HTTPException(status_code=404, detail={"error": "Task not found"})
 
     async def event_generator() -> AsyncGenerator[dict[str, str], None]:
-        last_idx = 0
         while True:
             if await request.is_disconnected():
                 break
 
-            # Wait for new data or timeout
-            event = _task_events.get(task_id)
-            if event:
-                try:
-                    await asyncio.wait_for(event.wait(), timeout=1.0)
-                    event.clear()
-                except asyncio.TimeoutError:
-                    pass
+            try:
+                update: DownloadProgress = await queue.get()
+            except asyncio.CancelledError:
+                break
 
-            updates = _tasks.get(task_id, [])
-            for update in updates[last_idx:]:
-                yield {"data": update.model_dump_json()}
-                last_idx += 1
+            yield {"data": update.model_dump_json()}
 
-                if update.status in (DownloadStatus.COMPLETE, DownloadStatus.ERROR):
-                    # Clean up after a short delay
-                    await asyncio.sleep(1)
-                    _tasks.pop(task_id, None)
-                    _task_events.pop(task_id, None)
-                    return
-
-            await asyncio.sleep(0.3)
+            if update.status in (DownloadStatus.COMPLETE, DownloadStatus.ERROR):
+                # Clean up immediately
+                _task_queues.pop(task_id, None)
+                _cancel_flags.pop(task_id, None)
+                return
 
     return EventSourceResponse(event_generator())
 
