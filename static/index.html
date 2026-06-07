@@ -325,5 +325,13 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.js"></script>
   <script src="/static/app.js"></script>
+  
+  <!-- Vercel Speed Insights -->
+  <script type="module">
+    import { injectSpeedInsights } from '/static/speed-insights.js';
+    injectSpeedInsights({
+      debug: false
+    });
+  </script>
 </body>
 </html>
