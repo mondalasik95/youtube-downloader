@@ -161,8 +161,7 @@ def fetch_video_info(url: str) -> VideoInfoResponse | PlaylistResponse:
         "quiet": True,
         "no_warnings": True,
         "skip_download": True,
-        "extract_flat": "in_playlist", # Extracts playlist info but full info for single videos
-        "extractor_args": {"youtube": {"player_client": ["android_vr", "web"]}},
+        "extract_flat": "in_playlist",
     }
 
     try:
@@ -278,7 +277,6 @@ def _build_base_ydl_opts(
         "quiet": True,
         "no_warnings": True,
         "color": "no_color",
-        "extractor_args": {"youtube": {"player_client": ["android_vr", "web"]}},
         "postprocessors": [
             {"key": "FFmpegMetadata", "add_metadata": True},
         ],
