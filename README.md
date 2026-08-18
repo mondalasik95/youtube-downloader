@@ -4,7 +4,7 @@ A local web-based YouTube video downloader. Runs entirely on your machine — no
 
 ## Features
 
-- 🎬 **Download up to 8K**: Uses advanced client spoofing (`android_vr`) to bypass YouTube's SABR streaming block, unlocking 4K and 8K AV1 streams out of the box!
+- 🎬 **Download up to 8K**: Automatically bypasses YouTube's SABR streaming blocks using the latest yt-dlp heuristics to unlock 4K and 8K AV1 streams out of the box!
 - 🔍 **Native YouTube Search**: Just type a query directly into the URL bar to search and browse YouTube without leaving the app!
 - ✂️ **Video Clipping**: Download exact segments of a video by specifying a start and end time (e.g. `00:01:00`).
 - 📝 **Subtitle Embedding**: Automatically fetch and burn English or auto-generated subtitles directly into your video files.
@@ -95,7 +95,7 @@ youtube-downloader/
 | Issue | Solution |
 |-------|----------|
 | **FFmpeg not found** | Ensure FFmpeg is installed and added to your system's PATH variable. |
-| **8K Formats Missing** | The app already uses `android_vr` to bypass blocks. If they ever break, run `pip install --upgrade yt-dlp` to get the latest patches. |
+| **8K Formats Missing** | YouTube frequently updates its anti-bot measures. If high resolutions disappear or throw 403 errors, install the latest nightly patch by running: `pip install -U --pre "yt-dlp[default]"` |
 | **Port 8000 in use** | Stop whatever is running on port 8000, or modify the port at the bottom of `main.py`. |
 
 ## Acknowledgments
